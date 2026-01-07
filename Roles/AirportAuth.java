@@ -4,7 +4,7 @@ import Models.Gate;
 import Models.Runway;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.List;
+// import java.util.List;
 
 public class AirportAuth {
     Airport airport;
@@ -23,34 +23,33 @@ public class AirportAuth {
         this.operatingHoursEnd = LocalTime.of(23, 0);
     }
 
-    // Policy: Configure runways
+    
     public void addRunway(int runwayNumber, int length) {
         Runway runway = new Runway(runwayNumber, length);
         airport.getRunways().add(runway);
         System.out.println("Runway " + runwayNumber + " added with length " + length);
     }
 
-    // Policy: Configure gates
     public void addGate(int gateNumber, int capacity, LocalTime openTime, LocalTime closeTime) {
         Gate gate = new Gate(gateNumber, capacity, openTime, closeTime);
         airport.getGates().add(gate);
         System.out.println("Gate " + gateNumber + " added with capacity " + capacity);
     }
 
-    // Policy: Set safety buffer between flights
+    
     public void setSafetyBuffer(int bufferMinutes) {
         this.safetyBuffer = bufferMinutes;
         System.out.println("Safety buffer set to " + bufferMinutes + " minutes");
     }
 
-    // Policy: Set operating hours
+    
     public void setOperatingHours(LocalTime start, LocalTime end) {
         this.operatingHoursStart = start;
         this.operatingHoursEnd = end;
         System.out.println("Operating hours: " + start + " to " + end);
     }
 
-    // Monitoring: View airport configuration
+    
     public void viewAirportConfig() {
         System.out.println("\n=== AIRPORT CONFIGURATION ===");
         System.out.println("Airport: " + airport.getName());
@@ -67,27 +66,26 @@ public class AirportAuth {
         }
     }
 
-    // Monitoring: Get available runways count
+    
     public int getAvailableRunwaysCount() {
         return airport.getRunways().size();
     }
 
-    // Monitoring: Get available gates count
+    
     public int getAvailableGatesCount() {
         return airport.getGates().size();
     }
 
-    // Utility: Get airport object
+    
     public Airport getAirport() {
         return airport;
     }
 
-    // Utility: Get safety buffer
     public int getSafetyBuffer() {
         return safetyBuffer;
     }
 
-    // Utility: Get operating hours
+    
     public LocalTime getOperatingHoursStart() {
         return operatingHoursStart;
     }
