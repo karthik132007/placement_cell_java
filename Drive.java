@@ -3,16 +3,17 @@ import java.time.LocalDate;
 public class Drive {
     LocalDate Startdate;
     LocalDate Enddate;
-    int requirement;
+    int availableSeats;
     double LPA;
     Company company;
-    double cutoffGPA;
-    public Drive(LocalDate startdate, LocalDate enddate, int requirement, double LPA, Company company) {
+    double MinGPA;
+    public Drive(LocalDate startdate, LocalDate enddate, int availableSeats, double LPA, Company company, double MinGPA) {
         Startdate = startdate;
         Enddate = enddate;
-        this.requirement = requirement;
+        this.availableSeats = availableSeats;
         this.LPA = LPA;
         this.company = company;
+        this.MinGPA = MinGPA;
     }
 
 }
