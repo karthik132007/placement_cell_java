@@ -1,4 +1,0 @@
-CREATE TABLE AIRPORT(
-    INT id PRIMARY KEY;
-    TEXT
-);
