@@ -4,7 +4,6 @@ import java.sql.*;
 
 public class ApplicationDB {
 
-    // Create (apply to a drive)
     public static boolean addApplication(int driveId, String studentId) {
         try (Connection c = connecton.getConnection()) {
             PreparedStatement ps = c.prepareStatement(
