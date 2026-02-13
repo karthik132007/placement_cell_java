@@ -3,7 +3,6 @@ package DB_connections;
 import java.sql.*;
 
 public class ApplicationDB {
-
     public static boolean addApplication(int driveId, String studentId) {
         try (Connection c = connecton.getConnection()) {
             PreparedStatement ps = c.prepareStatement(
