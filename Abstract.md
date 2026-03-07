@@ -2,7 +2,7 @@
 
 ## Placement Cell Management System
 
-The **Placement Cell Management System** is a desktop application built using **Java Swing** and **MySQL** that streamlines the campus placement process for educational institutions. It provides a centralized platform for administrators to manage companies, create placement drives, and track student applications, while giving students the ability to register, browse eligible drives, and monitor their application status.
+The **Placement Management System** is a desktop application built using **Java Swing** and **MySQL** that streamlines the campus placement process for educational institutions. It provides a centralized platform for administrators to manage companies, create placement drives, and track student applications, while giving students the ability to register, browse eligible drives, and monitor their application status.
 
 ### Problem Statement
 
