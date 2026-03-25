@@ -7,6 +7,7 @@ import javax.swing.plaf.basic.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
+import com.toedter.calendar.JDateChooser;
 
 /**
  * Premium dark theme for the Placement Cell Management System.
@@ -438,6 +439,71 @@ public class UITheme {
             BorderFactory.createEmptyBorder(8, 14, 8, 14)));
         field.setPreferredSize(new Dimension(280, 40));
         return field;
+    }
+
+    // ═══════════════════════ STYLED DATE/TIME SPINNERS ═══════════════════════
+
+    public static JSpinner createStyledDateSpinner(java.util.Date date) {
+        SpinnerDateModel model = new SpinnerDateModel(date == null ? new java.util.Date() : date, null, null, java.util.Calendar.DAY_OF_MONTH);
+        JSpinner spinner = new JSpinner(model);
+        JSpinner.DateEditor editor = new JSpinner.DateEditor(spinner, "yyyy-MM-dd");
+        spinner.setEditor(editor);
+
+        JFormattedTextField textField = ((JSpinner.DefaultEditor) spinner.getEditor()).getTextField();
+        textField.setBackground(BG_TERTIARY);
+        textField.setForeground(TEXT_PRIMARY);
+        textField.setCaretColor(ACCENT);
+        textField.setFont(FONT_BODY);
+        textField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(8, 14, 8, 14)));
+
+        spinner.setOpaque(false);
+        spinner.setBackground(BG_TERTIARY);
+        spinner.setPreferredSize(new Dimension(280, 40));
+        return spinner;
+    }
+
+    public static JSpinner createStyledTimeSpinner(java.util.Date date) {
+        SpinnerDateModel model = new SpinnerDateModel(date == null ? new java.util.Date() : date, null, null, java.util.Calendar.SECOND);
+        JSpinner spinner = new JSpinner(model);
+        JSpinner.DateEditor editor = new JSpinner.DateEditor(spinner, "HH:mm:ss");
+        spinner.setEditor(editor);
+
+        JFormattedTextField textField = ((JSpinner.DefaultEditor) spinner.getEditor()).getTextField();
+        textField.setBackground(BG_TERTIARY);
+        textField.setForeground(TEXT_PRIMARY);
+        textField.setCaretColor(ACCENT);
+        textField.setFont(FONT_BODY);
+        textField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(8, 14, 8, 14)));
+
+        spinner.setOpaque(false);
+        spinner.setBackground(BG_TERTIARY);
+        spinner.setPreferredSize(new Dimension(280, 40));
+        return spinner;
+    }
+
+    public static JDateChooser createStyledDateChooser(java.util.Date date) {
+        JDateChooser chooser = new JDateChooser(date == null ? new java.util.Date() : date);
+        chooser.setDateFormatString("yyyy-MM-dd");
+        chooser.setOpaque(false);
+        chooser.setBackground(BG_TERTIARY);
+        chooser.setForeground(TEXT_PRIMARY);
+        chooser.setFont(FONT_BODY);
+        
+        JTextField textField = (JTextField) chooser.getDateEditor().getUiComponent();
+        textField.setBackground(BG_TERTIARY);
+        textField.setForeground(TEXT_PRIMARY);
+        textField.setCaretColor(ACCENT);
+        textField.setFont(FONT_BODY);
+        textField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(8, 14, 8, 14)));
+
+        chooser.setPreferredSize(new Dimension(280, 40));
+        return chooser;
     }
 
     // ═══════════════════════ STYLED PASSWORD FIELD ═══════════════════════

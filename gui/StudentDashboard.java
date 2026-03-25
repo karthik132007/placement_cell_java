@@ -18,8 +18,8 @@ public class StudentDashboard extends JFrame {
     private String studentName;
 
     // Nav config
-    private static final String[] NAV_ICONS = {"👤", "🎯", "📝"};
-    private static final String[] NAV_LABELS = {"Profile", "Available Drives", "My Applications"};
+    private static final String[] NAV_ICONS = {"👤", "🎯", "📝", "🔔", "📅"};
+    private static final String[] NAV_LABELS = {"Profile", "Available Drives", "My Applications", "Notifications", "Interviews"};
 
     public StudentDashboard(String rollNum, String name) {
         UITheme.applyGlobalTheme();
@@ -192,6 +192,8 @@ public class StudentDashboard extends JFrame {
             case "Profile":          showProfile(); break;
             case "Available Drives": showDrives(); break;
             case "My Applications":  showApplications(); break;
+            case "Notifications":    showNotifications(); break;
+            case "Interviews":       showInterviews(); break;
         }
     }
 
@@ -233,7 +235,7 @@ public class StudentDashboard extends JFrame {
         card.setOpaque(false);
         card.setLayout(new BorderLayout());
         card.setBorder(BorderFactory.createEmptyBorder(24, 0, 24, 0));
-        card.setPreferredSize(new Dimension(560, 440));
+        card.setPreferredSize(new Dimension(560, 650));
 
         // Top section with avatar + name
         JPanel topSection = new JPanel();
@@ -294,7 +296,11 @@ public class StudentDashboard extends JFrame {
         JTextField fMajor = UITheme.createStyledTextField("Major");
         JTextField fGPA = UITheme.createStyledTextField("GPA");
         JTextField fEmail = UITheme.createStyledTextField("Email");
-
+        JPasswordField fPass = UITheme.createStyledPasswordField("Password");
+        JTextField fResume = UITheme.createStyledTextField("Resume path");        JButton chooseResumeBtn = UITheme.createSecondaryButton("Choose File");
+        JLabel resumeLabel = new JLabel("No file selected");
+        resumeLabel.setForeground(UITheme.TEXT_SECONDARY);
+        resumeLabel.setFont(UITheme.FONT_SMALL);
         // Load current data
         try {
             ResultSet rs = StudentDB.getStudentByRoll(rollNum);
@@ -303,14 +309,41 @@ public class StudentDashboard extends JFrame {
                 fAge.setText(String.valueOf(rs.getInt("age")));
                 fMajor.setText(rs.getString("major"));
                 fGPA.setText(String.valueOf(rs.getDouble("gpa")));
-                fEmail.setText(rs.getString("email"));
+                fPass.setText(rs.getString("password"));
+                fResume.setText(rs.getString("resume_path") != null ? rs.getString("resume_path") : "");
+                resumeLabel.setText(rs.getString("resume_path") != null ? 
+                    rs.getString("resume_path").substring(rs.getString("resume_path").lastIndexOf("\\") + 1) : "No file selected");
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
 
-        String[] labels = {"NAME", "AGE", "MAJOR", "GPA", "EMAIL"};
-        JTextField[] fields = {fName, fAge, fMajor, fGPA, fEmail};
+        chooseResumeBtn.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("PDF and DOC files", "pdf", "doc", "docx"));
+            int result = fileChooser.showOpenDialog(this);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                java.io.File selectedFile = fileChooser.getSelectedFile();
+                try {
+                    // Copy file to resumes directory
+                    java.nio.file.Path source = selectedFile.toPath();
+                    String fileName = rollNum + "_" + selectedFile.getName();
+                    java.nio.file.Path target = java.nio.file.Paths.get("resumes", fileName);
+                    java.nio.file.Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    
+                    fResume.setText("resumes/" + fileName);
+                    resumeLabel.setText(selectedFile.getName());
+                } catch (java.io.IOException ex) {
+                    msg("Error uploading file: " + ex.getMessage());
+                }
+            }
+        });
+
+        String[] labels = {"NAME", "AGE", "MAJOR", "GPA", "EMAIL", "PASSWORD", "RESUME"};
+        Object[] fields = {fName, fAge, fMajor, fGPA, fEmail, fPass, fResume};
+        JButton[] buttons = {null, null, null, null, null, null, chooseResumeBtn};
+        JLabel[] extraLabels = {null, null, null, null, null, null, resumeLabel};
 
         for (int i = 0; i < labels.length; i++) {
             gbc.gridx = 0;
@@ -325,8 +358,27 @@ public class StudentDashboard extends JFrame {
             gbc.gridx = 1;
             gbc.fill = GridBagConstraints.HORIZONTAL;
             gbc.weightx = 1.0;
-            fields[i].setPreferredSize(new Dimension(320, 38));
-            form.add(fields[i], gbc);
+            if (fields[i] instanceof JTextField || fields[i] instanceof JPasswordField) {
+                ((JComponent) fields[i]).setPreferredSize(new Dimension(250, 38));
+                form.add((JComponent) fields[i], gbc);
+            }
+
+            if (buttons[i] != null) {
+                gbc.gridx = 2;
+                gbc.fill = GridBagConstraints.NONE;
+                gbc.weightx = 0;
+                gbc.insets = new Insets(0, 10, 6, 0);
+                form.add(buttons[i], gbc);
+            }
+
+            if (extraLabels[i] != null) {
+                gbc.gridx = 1;
+                gbc.gridy = i + 1;
+                gbc.fill = GridBagConstraints.HORIZONTAL;
+                gbc.weightx = 1.0;
+                gbc.insets = new Insets(-6, 0, 6, 0);
+                form.add(extraLabels[i], gbc);
+            }
         }
 
         // Save button
@@ -341,7 +393,8 @@ public class StudentDashboard extends JFrame {
             try {
                 StudentDB.updateStudent(rollNum, fName.getText().trim(),
                         Integer.parseInt(fAge.getText().trim()), fMajor.getText().trim(),
-                        Double.parseDouble(fGPA.getText().trim()), fEmail.getText().trim());
+                        Double.parseDouble(fGPA.getText().trim()), fEmail.getText().trim(),
+                        new String(fPass.getPassword()).trim(), fResume.getText().trim());
                 msg("Profile updated!");
             } catch (NumberFormatException ex) {
                 msg("Age must be integer, GPA must be a number.");
@@ -351,7 +404,14 @@ public class StudentDashboard extends JFrame {
 
         card.add(form, BorderLayout.CENTER);
         outerWrapper.add(card);
-        contentPanel.add(outerWrapper, BorderLayout.CENTER);
+        
+        JScrollPane scrollPane = new JScrollPane(outerWrapper);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(UITheme.BG_PRIMARY);
+        scrollPane.setBackground(UITheme.BG_PRIMARY);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        contentPanel.add(scrollPane, BorderLayout.CENTER);
+        
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -527,6 +587,125 @@ public class StudentDashboard extends JFrame {
 
         contentPanel.add(centerPanel, BorderLayout.CENTER);
         contentPanel.add(UITheme.createActionBar(withdrawBtn), BorderLayout.SOUTH);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    // ──────────────────── Notifications Section ────────────────────
+    private void showNotifications() {
+        DefaultTableModel model = new DefaultTableModel(
+                new String[]{"ID", "Message", "Date", "Read"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = UITheme.createStyledTable(model);
+
+        try {
+            ResultSet rs = NotificationDB.getNotifications("student", rollNum);
+            while (rs != null && rs.next()) {
+                Object[] row = {rs.getInt("id"), rs.getString("message"),
+                        rs.getString("sent_date"), rs.getBoolean("is_read") ? "Yes" : "No"};
+                model.addRow(row);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+
+        JPanel header = UITheme.createHeaderPanel("Notifications");
+        JButton markReadBtn = UITheme.createSecondaryButton("Mark as Read");
+        JButton markUnreadBtn = UITheme.createSecondaryButton("Mark as Unread");
+
+        // Double-click to view full message
+        table.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && table.getSelectedRow() != -1) {
+                    int row = table.getSelectedRow();
+                    String message = (String) model.getValueAt(row, 1);
+                    
+                    JTextArea textArea = new JTextArea(message);
+                    textArea.setLineWrap(true);
+                    textArea.setWrapStyleWord(true);
+                    textArea.setFont(UITheme.FONT_BODY);
+                    textArea.setBackground(UITheme.BG_SECONDARY);
+                    textArea.setForeground(UITheme.TEXT_PRIMARY);
+                    textArea.setEditable(false);
+                    textArea.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+                    
+                    JScrollPane scrollPane = new JScrollPane(textArea);
+                    scrollPane.setPreferredSize(new Dimension(500, 300));
+                    scrollPane.setBorder(BorderFactory.createLineBorder(UITheme.DIVIDER));
+                    
+                    Object[] fields = {"Details:", scrollPane};
+                    UITheme.showStyledDialog(StudentDashboard.this, "Notification Details", fields);
+                    
+                    // Automatically mark as read
+                    int notifId = (int) model.getValueAt(row, 0);
+                    if ("No".equals(model.getValueAt(row, 3))) {
+                        NotificationDB.markAsRead(notifId);
+                        model.setValueAt("Yes", row, 3);
+                    }
+                }
+            }
+        });
+
+        markReadBtn.addActionListener(e -> {
+            int[] rows = table.getSelectedRows();
+            if (rows.length == 0) { msg("Select a notification first."); return; }
+            for (int row : rows) {
+                int notifId = (int) model.getValueAt(row, 0);
+                if ("No".equals(model.getValueAt(row, 3))) {
+                    if (NotificationDB.markAsRead(notifId)) {
+                        model.setValueAt("Yes", row, 3);
+                    }
+                }
+            }
+        });
+
+        markUnreadBtn.addActionListener(e -> {
+            int[] rows = table.getSelectedRows();
+            if (rows.length == 0) { msg("Select a notification first."); return; }
+            for (int row : rows) {
+                int notifId = (int) model.getValueAt(row, 0);
+                if ("Yes".equals(model.getValueAt(row, 3))) {
+                    if (NotificationDB.markAsUnread(notifId)) {
+                        model.setValueAt("No", row, 3);
+                    }
+                }
+            }
+        });
+
+        contentPanel.removeAll();
+        contentPanel.add(header, BorderLayout.NORTH);
+        contentPanel.add(UITheme.createStyledScrollPane(table), BorderLayout.CENTER);
+        contentPanel.add(UITheme.createActionBar(markReadBtn, markUnreadBtn), BorderLayout.SOUTH);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    // ──────────────────── Interviews Section ────────────────────
+    private void showInterviews() {
+        DefaultTableModel model = new DefaultTableModel(
+                new String[]{"ID", "Company", "Date & Time", "Type", "Status", "Notes"}, 0);
+        JTable table = UITheme.createStyledTable(model);
+
+        try {
+            ResultSet rs = InterviewDB.getInterviewsByStudent(rollNum);
+            while (rs != null && rs.next()) {
+                Object[] row = {rs.getInt("id"), rs.getString("cname"),
+                        rs.getString("interview_date"), rs.getString("interview_type"),
+                        rs.getString("status"), rs.getString("notes")};
+                model.addRow(row);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+
+        JPanel header = UITheme.createHeaderPanel("My Interviews");
+        contentPanel.removeAll();
+        contentPanel.add(header, BorderLayout.NORTH);
+        contentPanel.add(UITheme.createStyledScrollPane(table), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }

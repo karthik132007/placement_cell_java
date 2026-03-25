@@ -176,10 +176,10 @@ public class LoginFrame extends JFrame {
         formPanel.add(Box.createVerticalStrut(16));
 
         // Password
-        JLabel passLabel = createFieldLabel("PASSWORD / EMAIL");
+        JLabel passLabel = createFieldLabel("PASSWORD");
         formPanel.add(passLabel);
         formPanel.add(Box.createVerticalStrut(6));
-        JPasswordField passField = UITheme.createStyledPasswordField("Enter your password or email");
+        JPasswordField passField = UITheme.createStyledPasswordField("Enter your password");
         passField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         formPanel.add(passField);
 
@@ -235,7 +235,7 @@ public class LoginFrame extends JFrame {
                         dispose();
                         new StudentDashboard(user, name);
                     } else {
-                        UITheme.showMessage(this, "Invalid roll number or email.");
+                        UITheme.showMessage(this, "Invalid roll number or password.");
                     }
                 } catch (SQLException ex) {
                     UITheme.showMessage(this, "Error: " + ex.getMessage());
@@ -250,13 +250,25 @@ public class LoginFrame extends JFrame {
             JTextField fMajor = UITheme.createStyledTextField("e.g. Computer Science");
             JTextField fGPA = UITheme.createStyledTextField("e.g. 8.5");
             JTextField fEmail = UITheme.createStyledTextField("e.g. name@example.com");
+            JPasswordField fPass = UITheme.createStyledPasswordField("Enter password");
+            JPasswordField fConfirmPass = UITheme.createStyledPasswordField("Confirm password");
             Object[] fields = {"Roll No:", fRoll, "Name:", fName, "Age:", fAge,
-                    "Major:", fMajor, "GPA:", fGPA, "Email:", fEmail};
+                    "Major:", fMajor, "GPA:", fGPA, "Email:", fEmail, "Password:", fPass, "Confirm Password:", fConfirmPass};
             if (UITheme.showStyledDialog(this, "Student Registration", fields)) {
+                String pass = new String(fPass.getPassword()).trim();
+                String confirmPass = new String(fConfirmPass.getPassword()).trim();
+                if (!pass.equals(confirmPass)) {
+                    UITheme.showMessage(this, "Passwords do not match.");
+                    return;
+                }
+                if (pass.isEmpty()) {
+                    UITheme.showMessage(this, "Password cannot be empty.");
+                    return;
+                }
                 try {
                     if (StudentDB.addStudent(fRoll.getText().trim(), fName.getText().trim(),
                             Integer.parseInt(fAge.getText().trim()), fMajor.getText().trim(),
-                            Double.parseDouble(fGPA.getText().trim()), fEmail.getText().trim())) {
+                            Double.parseDouble(fGPA.getText().trim()), fEmail.getText().trim(), pass)) {
                         UITheme.showMessage(this, "Registered! You can now login.");
                     } else {
                         UITheme.showMessage(this, "Registration failed.");
