@@ -486,9 +486,16 @@ public class StudentDashboard extends JFrame {
 
             try {
                 ResultSet rs = StudentDB.getStudentByRoll(rollNum);
-                if (rs != null && rs.next() && rs.getDouble("gpa") < minGpa) {
-                    msg("Your GPA is below the minimum required (" + minGpa + ").");
-                    return;
+                if (rs != null && rs.next()) {
+                    if (rs.getDouble("gpa") < minGpa) {
+                        msg("Your GPA is below the minimum required (" + minGpa + ").");
+                        return;
+                    }
+                    String resume = rs.getString("resume_path");
+                    if (resume == null || resume.trim().isEmpty()) {
+                        msg("You must upload a resume in your Profile before applying to drives.");
+                        return;
+                    }
                 }
             } catch (SQLException ex) {
                 msg("Error: " + ex.getMessage());

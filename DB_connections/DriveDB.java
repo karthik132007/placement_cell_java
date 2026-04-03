@@ -6,16 +6,17 @@ public class DriveDB {
 
     // Create
     public static boolean addDrive(int companyId, String startDate, String endDate, int seats, double lpa,
-            double mingpa) {
+            double mingpa, String roundsList) {
         try (Connection c = connecton.getConnection()) {
             PreparedStatement ps = c.prepareStatement(
-                    "INSERT INTO drive(companyId, start_date, end_date, availableSeats, lpa, mingpa) VALUES(?,?,?,?,?,?)");
+                    "INSERT INTO drive(companyId, start_date, end_date, availableSeats, lpa, mingpa, rounds_list) VALUES(?,?,?,?,?,?,?)");
             ps.setInt(1, companyId);
             ps.setString(2, startDate);
             ps.setString(3, endDate);
             ps.setInt(4, seats);
             ps.setDouble(5, lpa);
             ps.setDouble(6, mingpa);
+            ps.setString(7, roundsList);
             ps.executeUpdate();
             return true;
         } catch (SQLException e) {
@@ -67,17 +68,18 @@ public class DriveDB {
 
     // Update
     public static boolean updateDrive(int dId, int companyId, String startDate, String endDate, int seats, double lpa,
-            double mingpa) {
+            double mingpa, String roundsList) {
         try (Connection c = connecton.getConnection()) {
             PreparedStatement ps = c.prepareStatement(
-                    "UPDATE drive SET companyId=?, start_date=?, end_date=?, availableSeats=?, lpa=?, mingpa=? WHERE D_id=?");
+                    "UPDATE drive SET companyId=?, start_date=?, end_date=?, availableSeats=?, lpa=?, mingpa=?, rounds_list=? WHERE D_id=?");
             ps.setInt(1, companyId);
             ps.setString(2, startDate);
             ps.setString(3, endDate);
             ps.setInt(4, seats);
             ps.setDouble(5, lpa);
             ps.setDouble(6, mingpa);
-            ps.setInt(7, dId);
+            ps.setString(7, roundsList);
+            ps.setInt(8, dId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             e.printStackTrace();

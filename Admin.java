@@ -5,13 +5,13 @@ public class Admin {
     
 
     public boolean addDrive(int companyId, String startDate, String endDate,
-            int seats, double lpa, double minGpa) {
-        return DriveDB.addDrive(companyId, startDate, endDate, seats, lpa, minGpa);
+            int seats, double lpa, double minGpa, String roundsList) {
+        return DriveDB.addDrive(companyId, startDate, endDate, seats, lpa, minGpa, roundsList);
     }
 
     public boolean updateDrive(int driveId, int companyId, String startDate, String endDate,
-            int seats, double lpa, double minGpa) {
-        return DriveDB.updateDrive(driveId, companyId, startDate, endDate, seats, lpa, minGpa);
+            int seats, double lpa, double minGpa, String roundsList) {
+        return DriveDB.updateDrive(driveId, companyId, startDate, endDate, seats, lpa, minGpa, roundsList);
     }
 
     public boolean deleteDrive(int driveId) {

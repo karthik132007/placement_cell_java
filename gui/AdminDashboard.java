@@ -4,7 +4,6 @@ import javax.swing.*;
 import javax.swing.event.*;
 import javax.swing.table.*;
 import java.awt.*;
-import java.awt.geom.*;
 import java.sql.*;
 import DB_connections.*;
 
@@ -167,32 +166,6 @@ public class AdminDashboard extends JFrame {
     }
 
     // helper to swap content
-    private void setContent(String title, JPanel statsRow, JScrollPane tableScroll, JPanel buttons) {
-        contentPanel.removeAll();
-
-        JPanel header = UITheme.createHeaderPanel(title);
-        contentPanel.add(header, BorderLayout.NORTH);
-
-        JPanel centerPanel = new JPanel(new BorderLayout());
-        centerPanel.setOpaque(false);
-        centerPanel.setBorder(BorderFactory.createEmptyBorder(0, 28, 0, 28));
-
-        if (statsRow != null) {
-            centerPanel.add(statsRow, BorderLayout.NORTH);
-        }
-
-        JPanel tableWrapper = new JPanel(new BorderLayout());
-        tableWrapper.setOpaque(false);
-        tableWrapper.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
-        tableWrapper.add(tableScroll, BorderLayout.CENTER);
-        centerPanel.add(tableWrapper, BorderLayout.CENTER);
-
-        contentPanel.add(centerPanel, BorderLayout.CENTER);
-        contentPanel.add(buttons, BorderLayout.SOUTH);
-        contentPanel.revalidate();
-        contentPanel.repaint();
-    }
-
     /** Creates a stats row with cards. */
     private JPanel createStatsRow(JPanel... cards) {
         JPanel row = new JPanel(new GridLayout(1, cards.length, 16, 0));
@@ -268,8 +241,33 @@ public class AdminDashboard extends JFrame {
         JPanel header = UITheme.createHeaderPanel("Students");
         header.add(searchPanel, BorderLayout.EAST);
 
+        JButton viewResumeBtn = UITheme.createSecondaryButton("View Resume");
         JButton deleteBtn = UITheme.createDangerButton("Delete");
         JButton refreshBtn = UITheme.createSecondaryButton("Refresh");
+
+        viewResumeBtn.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) { msg("Select a student first."); return; }
+            String roll = (String) model.getValueAt(row, 0);
+            try {
+                ResultSet rs = DB_connections.StudentDB.getStudentByRoll(roll);
+                if (rs != null && rs.next()) {
+                    String resumePath = rs.getString("resume_path");
+                    if (resumePath != null && !resumePath.trim().isEmpty()) {
+                        java.io.File file = new java.io.File(resumePath);
+                        if (file.exists()) {
+                            java.awt.Desktop.getDesktop().open(file);
+                        } else {
+                            msg("Resume file not found on server.");
+                        }
+                    } else {
+                        msg("Student has not uploaded a resume.");
+                    }
+                }
+            } catch (Exception ex) {
+                msg("Error opening resume: " + ex.getMessage());
+            }
+        });
 
         deleteBtn.addActionListener(e -> {
             int row = table.getSelectedRow();
@@ -296,7 +294,7 @@ public class AdminDashboard extends JFrame {
         centerPanel.add(tableWrapper, BorderLayout.CENTER);
 
         contentPanel.add(centerPanel, BorderLayout.CENTER);
-        contentPanel.add(UITheme.createActionBar(deleteBtn, refreshBtn), BorderLayout.SOUTH);
+        contentPanel.add(UITheme.createActionBar(viewResumeBtn, deleteBtn, refreshBtn), BorderLayout.SOUTH);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -454,17 +452,35 @@ public class AdminDashboard extends JFrame {
             JTextField fSeats = UITheme.createStyledTextField("e.g. 50");
             JTextField fLPA = UITheme.createStyledTextField("e.g. 12.5");
             JTextField fGPA = UITheme.createStyledTextField("e.g. 7.0");
+            
+            JCheckBox cbApt = new JCheckBox("Aptitude"); cbApt.setOpaque(false); cbApt.setForeground(UITheme.TEXT_PRIMARY);
+            JCheckBox cbTr1 = new JCheckBox("TR1"); cbTr1.setOpaque(false); cbTr1.setForeground(UITheme.TEXT_PRIMARY); cbTr1.setSelected(true);
+            JCheckBox cbTr2 = new JCheckBox("TR2"); cbTr2.setOpaque(false); cbTr2.setForeground(UITheme.TEXT_PRIMARY);
+            JCheckBox cbHr  = new JCheckBox("HR");  cbHr.setOpaque(false); cbHr.setForeground(UITheme.TEXT_PRIMARY); cbHr.setSelected(true);
+            JPanel cbPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
+            cbPanel.setOpaque(false);
+            cbPanel.add(cbApt); cbPanel.add(cbTr1); cbPanel.add(cbTr2); cbPanel.add(cbHr);
+
             Object[] fields = {"Company:", cb, "Start:", fS, "End:", fE,
-                    "Seats:", fSeats, "LPA:", fLPA, "Min GPA:", fGPA};
+                    "Seats:", fSeats, "LPA:", fLPA, "Min GPA:", fGPA, "Rounds:", cbPanel};
             if (UITheme.showStyledDialog(this, "Create Drive", fields)) {
                 try {
                     int compId = Integer.parseInt(((String) cb.getSelectedItem()).split(" - ")[0]);
                     String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fS.getValue());
                     String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fE.getValue());
+                    
+                    java.util.List<String> rList = new java.util.ArrayList<>();
+                    if (cbApt.isSelected()) rList.add("Aptitude");
+                    if (cbTr1.isSelected()) rList.add("TR1");
+                    if (cbTr2.isSelected()) rList.add("TR2");
+                    if (cbHr.isSelected()) rList.add("HR");
+                    String roundsStr = rList.isEmpty() ? "HR" : String.join(",", rList);
+
                     DriveDB.addDrive(compId, startDate, endDate,
                             Integer.parseInt(fSeats.getText()),
                             Double.parseDouble(fLPA.getText()),
-                            Double.parseDouble(fGPA.getText()));
+                            Double.parseDouble(fGPA.getText()),
+                            roundsStr);
                     showDrives();
                 } catch (Exception ex) {
                     msg("Invalid input.");
@@ -494,16 +510,36 @@ public class AdminDashboard extends JFrame {
                     JTextField fSeats = UITheme.createStyledTextField(String.valueOf(rs.getInt("availableSeats")));
                     JTextField fLPA = UITheme.createStyledTextField(String.valueOf(rs.getDouble("lpa")));
                     JTextField fGPA = UITheme.createStyledTextField(String.valueOf(rs.getDouble("mingpa")));
+                    String currentRounds = rs.getString("rounds_list");
+                    if (currentRounds == null) currentRounds = "HR";
+                    
+                    JCheckBox cbApt = new JCheckBox("Aptitude"); cbApt.setOpaque(false); cbApt.setForeground(UITheme.TEXT_PRIMARY); cbApt.setSelected(currentRounds.contains("Aptitude"));
+                    JCheckBox cbTr1 = new JCheckBox("TR1"); cbTr1.setOpaque(false); cbTr1.setForeground(UITheme.TEXT_PRIMARY); cbTr1.setSelected(currentRounds.contains("TR1"));
+                    JCheckBox cbTr2 = new JCheckBox("TR2"); cbTr2.setOpaque(false); cbTr2.setForeground(UITheme.TEXT_PRIMARY); cbTr2.setSelected(currentRounds.contains("TR2"));
+                    JCheckBox cbHr  = new JCheckBox("HR");  cbHr.setOpaque(false); cbHr.setForeground(UITheme.TEXT_PRIMARY); cbHr.setSelected(currentRounds.contains("HR"));
+                    JPanel cbPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
+                    cbPanel.setOpaque(false);
+                    cbPanel.add(cbApt); cbPanel.add(cbTr1); cbPanel.add(cbTr2); cbPanel.add(cbHr);
+
                     Object[] fields = {"Company:", cb, "Start:", fS, "End:", fE,
-                            "Seats:", fSeats, "LPA:", fLPA, "Min GPA:", fGPA};
+                            "Seats:", fSeats, "LPA:", fLPA, "Min GPA:", fGPA, "Rounds:", cbPanel};
                     if (UITheme.showStyledDialog(this, "Edit Drive", fields)) {
                         int compId = Integer.parseInt(((String) cb.getSelectedItem()).split(" - ")[0]);
                         String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fS.getValue());
                         String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fE.getValue());
+                        
+                        java.util.List<String> rList = new java.util.ArrayList<>();
+                        if (cbApt.isSelected()) rList.add("Aptitude");
+                        if (cbTr1.isSelected()) rList.add("TR1");
+                        if (cbTr2.isSelected()) rList.add("TR2");
+                        if (cbHr.isSelected()) rList.add("HR");
+                        String roundsStr = rList.isEmpty() ? "HR" : String.join(",", rList);
+
                         DriveDB.updateDrive(driveId, compId, startDate, endDate,
                                 Integer.parseInt(fSeats.getText()),
                                 Double.parseDouble(fLPA.getText()),
-                                Double.parseDouble(fGPA.getText()));
+                                Double.parseDouble(fGPA.getText()),
+                                roundsStr);
                         showDrives();
                     }
                 }
@@ -547,7 +583,7 @@ public class AdminDashboard extends JFrame {
         table.getColumnModel().getColumn(6).setCellRenderer(UITheme.createStatusBadgeRenderer());
 
         java.util.List<Object[]> allData = new java.util.ArrayList<>();
-        loadAppData(model, null, allData);
+        loadAppData(model, null, "All Companies", allData);
 
         // Stats
         long applied = allData.stream().filter(r -> "Applied".equals(r[6])).count();
@@ -567,15 +603,27 @@ public class AdminDashboard extends JFrame {
 
         JComboBox<String> filterBox = UITheme.createStyledComboBox(
                 new String[]{"All", "Applied", "Shortlisted", "Accepted", "Rejected"});
+                
+        java.util.List<String> companyNamesList = new java.util.ArrayList<>();
+        companyNamesList.add("All Companies");
+        try {
+            ResultSet rs = DB_connections.CompanyDB.getAllCompanies();
+            while (rs != null && rs.next()) {
+                companyNamesList.add(rs.getString("name"));
+            }
+        } catch (SQLException ex) {}
+        JComboBox<String> companyFilterBox = UITheme.createStyledComboBox(companyNamesList.toArray(new String[0]));
+
         JButton filterBtn = UITheme.createSecondaryButton("Filter");
         JButton statusBtn = UITheme.createPrimaryButton("Update Status");
         JButton scheduleInterviewBtn = UITheme.createPrimaryButton("Schedule Interview");
 
         filterBtn.addActionListener(e -> {
             String f = (String) filterBox.getSelectedItem();
+            String cF = (String) companyFilterBox.getSelectedItem();
             model.setRowCount(0);
             allData.clear();
-            loadAppData(model, "All".equals(f) ? null : f, allData);
+            loadAppData(model, "All".equals(f) ? null : f, cF, allData);
         });
 
         statusBtn.addActionListener(e -> {
@@ -640,6 +688,7 @@ public class AdminDashboard extends JFrame {
         actionBar.setOpaque(false);
         actionBar.setBorder(BorderFactory.createEmptyBorder(14, 28, 14, 28));
         actionBar.add(filterBox);
+        actionBar.add(companyFilterBox);
         actionBar.add(filterBtn);
         actionBar.add(statusBtn);
         actionBar.add(scheduleInterviewBtn);
@@ -664,15 +713,18 @@ public class AdminDashboard extends JFrame {
         contentPanel.repaint();
     }
 
-    private void loadAppData(DefaultTableModel model, String statusFilter, java.util.List<Object[]> allData) {
+    private void loadAppData(DefaultTableModel model, String statusFilter, String companyFilter, java.util.List<Object[]> allData) {
         try {
             ResultSet rs = ApplicationDB.getAllApplications(statusFilter);
             while (rs != null && rs.next()) {
-                Object[] row = {rs.getInt("A_id"), rs.getInt("driveId"),
-                        rs.getString("cname"), rs.getString("s_id"), rs.getString("sname"),
-                        rs.getString("applicationDate"), rs.getString("status")};
-                allData.add(row);
-                model.addRow(row);
+                String cname = rs.getString("cname");
+                if (companyFilter == null || companyFilter.equals("All Companies") || companyFilter.equals(cname)) {
+                    Object[] row = {rs.getInt("A_id"), rs.getInt("driveId"),
+                            cname, rs.getString("s_id"), rs.getString("sname"),
+                            rs.getString("applicationDate"), rs.getString("status")};
+                    allData.add(row);
+                    model.addRow(row);
+                }
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -788,22 +840,88 @@ public class AdminDashboard extends JFrame {
         JButton deleteBtn = UITheme.createDangerButton("Delete");
 
         sendBtn.addActionListener(e -> {
-            JTextField fRecipient = UITheme.createStyledTextField("student rollnum or 'all'");
-            JTextField fMessage = UITheme.createStyledTextField("Message");
-            Object[] fields = {"Recipient:", fRecipient, "Message:", fMessage};
-            if (UITheme.showStyledDialog(this, "Send Notification", fields)) {
-                String recipient = fRecipient.getText().trim();
-                if ("all".equals(recipient)) {
-                    // Send to all students
-                    try {
-                        ResultSet rs = StudentDB.getAllStudents();
-                        while (rs != null && rs.next()) {
-                            NotificationDB.sendNotification("student", rs.getString("rollnum"), fMessage.getText());
-                        }
-                    } catch (SQLException ex) { ex.printStackTrace(); }
-                } else {
-                    NotificationDB.sendNotification("student", recipient, fMessage.getText());
+            java.util.List<String[]> students = new java.util.ArrayList<>();
+            try {
+                ResultSet rs = DB_connections.StudentDB.getAllStudents();
+                while (rs != null && rs.next()) {
+                    students.add(new String[]{rs.getString("rollnum"), rs.getString("name")});
                 }
+            } catch (SQLException ex) { ex.printStackTrace(); }
+
+            DefaultTableModel stModel = new DefaultTableModel(new Object[]{"Select", "Student", "RollNumber"}, 0) {
+                @Override
+                public Class<?> getColumnClass(int columnIndex) {
+                    return columnIndex == 0 ? Boolean.class : String.class;
+                }
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return column == 0;
+                }
+            };
+            for (String[] s : students) {
+                stModel.addRow(new Object[]{false, s[1] + " (" + s[0] + ")", s[0]});
+            }
+
+            JTable stTable = UITheme.createStyledTable(stModel);
+            stTable.getColumnModel().getColumn(2).setMinWidth(0);
+            stTable.getColumnModel().getColumn(2).setMaxWidth(0);
+            stTable.getColumnModel().getColumn(2).setWidth(0);
+
+            TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(stModel);
+            stTable.setRowSorter(sorter);
+
+            JTextField searchBox = UITheme.createStyledTextField("Search students...");
+            searchBox.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent ev) { filter(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent ev) { filter(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent ev) { filter(); }
+                private void filter() {
+                    String query = searchBox.getText().trim();
+                    if (query.isEmpty()) { sorter.setRowFilter(null); }
+                    else { sorter.setRowFilter(javax.swing.RowFilter.regexFilter("(?i)" + query, 1)); }
+                }
+            });
+
+            JCheckBox selectAllCb = new JCheckBox("Select All Visible");
+            selectAllCb.setOpaque(false);
+            selectAllCb.setForeground(UITheme.TEXT_PRIMARY);
+            selectAllCb.addActionListener(ev -> {
+                boolean sel = selectAllCb.isSelected();
+                for (int i = 0; i < stTable.getRowCount(); i++) {
+                    int modelRow = stTable.convertRowIndexToModel(i);
+                    stModel.setValueAt(sel, modelRow, 0);
+                }
+            });
+
+            JPanel topPanel = new JPanel(new BorderLayout(10, 10));
+            topPanel.setOpaque(false);
+            topPanel.add(searchBox, BorderLayout.CENTER);
+            topPanel.add(selectAllCb, BorderLayout.EAST);
+
+            JScrollPane scrollPane = UITheme.createStyledScrollPane(stTable);
+            scrollPane.setPreferredSize(new Dimension(400, 200));
+
+            JPanel wrapper = new JPanel(new BorderLayout(0, 10));
+            wrapper.setOpaque(false);
+            wrapper.add(topPanel, BorderLayout.NORTH);
+            wrapper.add(scrollPane, BorderLayout.CENTER);
+
+            JTextField fMessage = UITheme.createStyledTextField("Message");
+            Object[] fields = {"Recipients:", wrapper, "Message:", fMessage};
+            
+            if (UITheme.showStyledDialog(this, "Send Notification", fields)) {
+                String msgText = fMessage.getText().trim();
+                if (msgText.isEmpty()) { msg("Message cannot be empty."); return; }
+                
+                int sentCount = 0;
+                for (int i = 0; i < stModel.getRowCount(); i++) {
+                    if ((Boolean) stModel.getValueAt(i, 0)) {
+                        String rollNum = (String) stModel.getValueAt(i, 2);
+                        NotificationDB.sendNotification("student", rollNum, msgText);
+                        sentCount++;
+                    }
+                }
+                msg("Successfully sent notification to " + sentCount + " students.");
                 showNotifications();
             }
         });
@@ -832,86 +950,109 @@ public class AdminDashboard extends JFrame {
 
     // ──────────────────── Interviews Section ────────────────────
     private void showInterviews() {
-        DefaultTableModel model = new DefaultTableModel(
-                new String[]{"ID", "Student", "Company", "Date & Time", "Type", "Status"}, 0);
-        JTable table = UITheme.createStyledTable(model);
+        DefaultTableModel modelActive = new DefaultTableModel(
+                new String[]{"ID", "Student", "Company", "Date/Time", "Type", "Status"}, 0);
+        JTable tableActive = UITheme.createStyledTable(modelActive);
 
-        java.util.List<Object[]> allData = new java.util.ArrayList<>();
-        loadInterviewData(model, null, allData);
+        DefaultTableModel modelAccepted = new DefaultTableModel(
+                new String[]{"ID", "Student", "Company", "Date/Time", "Type", "Status"}, 0);
+        JTable tableAccepted = UITheme.createStyledTable(modelAccepted);
+
+        java.util.List<Object[]> allDataActive = new java.util.ArrayList<>();
+        java.util.List<Object[]> allDataAccepted = new java.util.ArrayList<>();
+        loadInterviewData(modelActive, "!Accepted", "All Companies", allDataActive);
+        loadInterviewData(modelAccepted, "Accepted", "All Companies", allDataAccepted);
 
         // Stats
-        long scheduled = allData.stream().filter(r -> "Scheduled".equals(r[5])).count();
-        long completed = allData.stream().filter(r -> "Completed".equals(r[5])).count();
-        long accepted = allData.stream().filter(r -> "Accepted".equals(r[5])).count();
+        long scheduled = allDataActive.stream().filter(r -> "Scheduled".equals(r[5])).count();
+        long accepted = allDataAccepted.size();
         JPanel stats = createStatsRow(
-            UITheme.createStatCard("📅", "Total", String.valueOf(allData.size()), UITheme.STAT_BLUE),
+            UITheme.createStatCard("📅", "Active", String.valueOf(allDataActive.size()), UITheme.STAT_BLUE),
             UITheme.createStatCard("⏳", "Scheduled", String.valueOf(scheduled), UITheme.STAT_ORANGE),
             UITheme.createStatCard("✅", "Accepted", String.valueOf(accepted), UITheme.STAT_GREEN)
         );
 
-        JTextField[] searchRef = new JTextField[1];
-        JPanel searchPanel = UITheme.createSearchPanel("Search interviews...", searchRef);
-        attachSearch(searchRef[0], table, model, allData);
+        JTextField[] searchRefActive = new JTextField[1];
+        JPanel searchPanelActive = UITheme.createSearchPanel("Search active...", searchRefActive);
+        attachSearch(searchRefActive[0], tableActive, modelActive, allDataActive);
+
+        JTextField[] searchRefAccepted = new JTextField[1];
+        JPanel searchPanelAccepted = UITheme.createSearchPanel("Search accepted...", searchRefAccepted);
+        attachSearch(searchRefAccepted[0], tableAccepted, modelAccepted, allDataAccepted);
 
         JPanel header = UITheme.createHeaderPanel("Interviews");
-        header.add(searchPanel, BorderLayout.EAST);
 
         JComboBox<String> filterBox = UITheme.createStyledComboBox(
-                new String[]{"All", "Scheduled", "Completed", "Cancelled", "Accepted"});
-        filterBox.setSelectedIndex(0); // Always start with "All"
+                new String[]{"All Active", "Scheduled", "Completed", "Cancelled"});
+        filterBox.setSelectedIndex(0);
+        
+        java.util.List<String> intCompanyNamesList = new java.util.ArrayList<>();
+        intCompanyNamesList.add("All Companies");
+        try {
+            ResultSet rs = DB_connections.CompanyDB.getAllCompanies();
+            while (rs != null && rs.next()) {
+                intCompanyNamesList.add(rs.getString("name"));
+            }
+        } catch (SQLException ex) {}
+        JComboBox<String> companyFilterBox = UITheme.createStyledComboBox(intCompanyNamesList.toArray(new String[0]));
+        
         JButton filterBtn = UITheme.createSecondaryButton("Filter");
-        JButton scheduleBtn = UITheme.createPrimaryButton("Schedule Interview");
+        JButton rescheduleBtn = UITheme.createPrimaryButton("Reschedule");
         JButton updateBtn = UITheme.createSecondaryButton("Update Status");
         JButton deleteBtn = UITheme.createDangerButton("Delete");
 
         filterBtn.addActionListener(e -> {
             String f = (String) filterBox.getSelectedItem();
-            model.setRowCount(0);
-            allData.clear();
-            loadInterviewData(model, "All".equals(f) ? null : f, allData);
+            String cF = (String) companyFilterBox.getSelectedItem();
+            modelActive.setRowCount(0);
+            allDataActive.clear();
+            loadInterviewData(modelActive, "All Active".equals(f) ? "!Accepted" : f, cF, allDataActive);
+
+            modelAccepted.setRowCount(0);
+            allDataAccepted.clear();
+            loadInterviewData(modelAccepted, "Accepted", cF, allDataAccepted);
         });
 
-        scheduleBtn.addActionListener(e -> {
-            // Get applications for scheduling
-            java.util.List<String[]> applications = new java.util.ArrayList<>();
+        rescheduleBtn.addActionListener(e -> {
+            JTable targetTable = tableActive.getSelectedRow() >= 0 ? tableActive : (tableAccepted.getSelectedRow() >= 0 ? tableAccepted : null);
+            if (targetTable == null) { msg("Select an interview first."); return; }
+            int row = targetTable.getSelectedRow();
+            DefaultTableModel tModel = targetTable == tableActive ? modelActive : modelAccepted;
+
+            int interviewId = (int) tModel.getValueAt(row, 0);
+            String currentStudent = (String) tModel.getValueAt(row, 1);
+            String currentType = (String) tModel.getValueAt(row, 4);
+            // Current Date & Time format: "2026-03-25 08:00:00"
+            String currentDateTimeStr = (String) tModel.getValueAt(row, 3);
+            
+            java.util.Date parsedDate = new java.util.Date();
             try {
-                ResultSet rs = ApplicationDB.getAllApplications("Shortlisted");
-                while (rs != null && rs.next()) {
-                    applications.add(new String[]{String.valueOf(rs.getInt("A_id")),
-                            rs.getString("sname") + " - " + rs.getString("cname")});
+                if (currentDateTimeStr != null && !currentDateTimeStr.isEmpty()) {
+                     parsedDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(currentDateTimeStr);
                 }
-            } catch (SQLException ex) { ex.printStackTrace(); }
+            } catch(Exception ex) {}
 
-            if (applications.isEmpty()) {
-                msg("No shortlisted applications available.");
-                return;
-            }
+            com.toedter.calendar.JDateChooser dateSpinner = UITheme.createStyledDateChooser(parsedDate);
+            JSpinner timeSpinner = UITheme.createStyledTimeSpinner(parsedDate);
+            JTextField fType = UITheme.createStyledTextField(currentType);
+            JTextField fNotes = UITheme.createStyledTextField("Rescheduled notes");
 
-            JComboBox<String> appBox = new JComboBox<>();
-            for (String[] app : applications) appBox.addItem(app[1]);
-
-            com.toedter.calendar.JDateChooser dateSpinner = UITheme.createStyledDateChooser(new java.util.Date());
-            JSpinner timeSpinner = UITheme.createStyledTimeSpinner(new java.util.Date());
-            JTextField fType = UITheme.createStyledTextField("e.g. Technical Round 1");
-            JTextField fNotes = UITheme.createStyledTextField("Additional notes");
-
-            Object[] fields = {"Application:", appBox, "Date:", dateSpinner, "Time:", timeSpinner, "Type:", fType, "Notes:", fNotes};
-            if (UITheme.showStyledDialog(this, "Schedule Interview", fields)) {
-                String selectedApp = applications.get(appBox.getSelectedIndex())[0];
+            Object[] fields = {"Student:", new javax.swing.JLabel(currentStudent), "New Date:", dateSpinner, "New Time:", timeSpinner, "Type:", fType, "Notes:", fNotes};
+            if (UITheme.showStyledDialog(this, "Reschedule Interview", fields)) {
                 try {
                     java.util.Date dateValue = dateSpinner.getDate();
                     java.util.Date timeValue = (java.util.Date) timeSpinner.getValue();
                     java.time.LocalDate localDate = dateValue.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
                     java.time.LocalTime localTime = timeValue.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime();
-                    String interviewDate = java.time.LocalDateTime.of(localDate, localTime)
+                    String newInterviewDate = java.time.LocalDateTime.of(localDate, localTime)
                             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-                    boolean success = InterviewDB.scheduleInterview(Integer.parseInt(selectedApp), interviewDate, fType.getText(), fNotes.getText());
+                    boolean success = InterviewDB.rescheduleInterview(interviewId, newInterviewDate, fType.getText(), fNotes.getText());
                     if (success) {
-                        msg("Interview scheduled successfully! Student has been notified.");
+                        msg("Interview rescheduled successfully! Student has been notified.");
                         showInterviews();
                     } else {
-                        msg("Failed to schedule. Please check the selected date/time and try again.");
+                        msg("Failed to reschedule. Please try again.");
                     }
                 } catch (Exception ex) {
                     msg("Invalid date/time value. Please select date and time from pickers.");
@@ -920,29 +1061,39 @@ public class AdminDashboard extends JFrame {
         });
 
         updateBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) { msg("Select an interview first."); return; }
-            int interviewId = (int) model.getValueAt(row, 0);
+            JTable targetTable = tableActive.getSelectedRow() >= 0 ? tableActive : (tableAccepted.getSelectedRow() >= 0 ? tableAccepted : null);
+            if (targetTable == null) { msg("Select an interview first."); return; }
+            int row = targetTable.getSelectedRow();
+            DefaultTableModel tModel = targetTable == tableActive ? modelActive : modelAccepted;
+            int interviewId = (int) tModel.getValueAt(row, 0);
 
-            JComboBox<String> statusBox = new JComboBox<>(new String[]{"Scheduled", "Completed", "Cancelled", "Accepted"});
-            statusBox.setSelectedItem(model.getValueAt(row, 5));
+            JComboBox<String> statusBox = new JComboBox<>(new String[]{"Scheduled", "Qualified", "Rejected", "Accepted"});
+            statusBox.setSelectedItem(tModel.getValueAt(row, 5));
             JTextField fNotes = UITheme.createStyledTextField("Update notes");
 
             Object[] fields = {"Status:", statusBox, "Notes:", fNotes};
             if (UITheme.showStyledDialog(this, "Update Interview", fields)) {
                 String newStatus = (String) statusBox.getSelectedItem();
-                InterviewDB.updateInterviewStatus(interviewId, newStatus, fNotes.getText());
-                if ("Accepted".equals(newStatus)) {
-                    msg("Interview marked as accepted! Placement record created and student notified.");
+                String res = InterviewDB.updateInterviewStatus(interviewId, newStatus, fNotes.getText());
+                if ("FINAL".equals(res)) {
+                    msg("Final round qualified! Placement record created & student notified.");
+                } else if ("NEXT_ROUND".equals(res)) {
+                    msg("Student qualified! Next round is queued as 'Pending Schedule'.");
+                } else if ("SUCCESS".equals(res)) {
+                    msg("Interview updated successfully.");
+                } else {
+                    msg("Failed to update interview.");
                 }
                 showInterviews();
             }
         });
 
         deleteBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) { msg("Select an interview first."); return; }
-            InterviewDB.deleteInterview((int) model.getValueAt(row, 0));
+            JTable targetTable = tableActive.getSelectedRow() >= 0 ? tableActive : (tableAccepted.getSelectedRow() >= 0 ? tableAccepted : null);
+            if (targetTable == null) { msg("Select an interview first."); return; }
+            int row = targetTable.getSelectedRow();
+            DefaultTableModel tModel = targetTable == tableActive ? modelActive : modelAccepted;
+            InterviewDB.deleteInterview((int) tModel.getValueAt(row, 0));
             showInterviews();
         });
 
@@ -950,8 +1101,9 @@ public class AdminDashboard extends JFrame {
         actionBar.setOpaque(false);
         actionBar.setBorder(BorderFactory.createEmptyBorder(14, 28, 14, 28));
         actionBar.add(filterBox);
+        actionBar.add(companyFilterBox);
         actionBar.add(filterBtn);
-        actionBar.add(scheduleBtn);
+        actionBar.add(rescheduleBtn);
         actionBar.add(updateBtn);
         actionBar.add(deleteBtn);
 
@@ -963,11 +1115,35 @@ public class AdminDashboard extends JFrame {
         centerPanel.setBorder(BorderFactory.createEmptyBorder(0, 28, 0, 28));
         centerPanel.add(stats, BorderLayout.NORTH);
 
-        JPanel tableWrapper = new JPanel(new BorderLayout());
-        tableWrapper.setOpaque(false);
-        tableWrapper.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
-        tableWrapper.add(UITheme.createStyledScrollPane(table), BorderLayout.CENTER);
-        centerPanel.add(tableWrapper, BorderLayout.CENTER);
+        JPanel tabLeft = new JPanel(new BorderLayout(0, 5));
+        tabLeft.setOpaque(false);
+        tabLeft.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        JPanel pLeftTop = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 10)); 
+        pLeftTop.setOpaque(false);
+        pLeftTop.add(searchPanelActive);
+        tabLeft.add(pLeftTop, BorderLayout.NORTH);
+        tabLeft.add(UITheme.createStyledScrollPane(tableActive), BorderLayout.CENTER);
+
+        JPanel tabRight = new JPanel(new BorderLayout(0, 5));
+        tabRight.setOpaque(false);
+        tabRight.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        JPanel pRightTop = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 10)); 
+        pRightTop.setOpaque(false);
+        pRightTop.add(searchPanelAccepted);
+        tabRight.add(pRightTop, BorderLayout.NORTH);
+        tabRight.add(UITheme.createStyledScrollPane(tableAccepted), BorderLayout.CENTER);
+
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 14));
+        tabbedPane.addTab("Current Pipeline", tabLeft);
+        tabbedPane.addTab("Final Selection (Accepted)", tabRight);
+
+        JPanel contentWrapper = new JPanel(new BorderLayout());
+        contentWrapper.setOpaque(false);
+        contentWrapper.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        contentWrapper.add(tabbedPane, BorderLayout.CENTER);
+        
+        centerPanel.add(contentWrapper, BorderLayout.CENTER);
 
         contentPanel.add(centerPanel, BorderLayout.CENTER);
         contentPanel.add(actionBar, BorderLayout.SOUTH);
@@ -975,15 +1151,27 @@ public class AdminDashboard extends JFrame {
         contentPanel.repaint();
     }
 
-    private void loadInterviewData(DefaultTableModel model, String statusFilter, java.util.List<Object[]> allData) {
+    private void loadInterviewData(DefaultTableModel model, String statusFilter, String companyFilter, java.util.List<Object[]> allData) {
         try {
             ResultSet rs = InterviewDB.getAllInterviews();
             while (rs != null && rs.next()) {
+                String cname = rs.getString("cname");
                 String status = rs.getString("status");
-                if (status != null) status = status.trim(); // Handle whitespace
-                if (statusFilter == null || (status != null && statusFilter.equals(status))) {
+                if (status != null) status = status.trim();
+                
+                boolean statusMatch = false;
+                if (statusFilter == null) {
+                    statusMatch = true;
+                } else if (statusFilter.startsWith("!")) {
+                    statusMatch = status == null || !status.equals(statusFilter.substring(1));
+                } else {
+                    statusMatch = status != null && statusFilter.equals(status);
+                }
+                boolean companyMatch = (companyFilter == null || companyFilter.equals("All Companies") || companyFilter.equals(cname));
+                
+                if (statusMatch && companyMatch) {
                     Object[] row = {rs.getInt("id"), rs.getString("sname") + " (" + rs.getString("s_id") + ")",
-                            rs.getString("cname"), rs.getString("interview_date"),
+                            cname, rs.getString("interview_date"),
                             rs.getString("interview_type"), status};
                     allData.add(row);
                     model.addRow(row);

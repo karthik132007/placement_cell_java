@@ -25,6 +25,7 @@ CREATE TABLE drive (
     availableSeats INT NOT NULL,
     lpa DECIMAL(10, 2) NOT NULL,
     mingpa DECIMAL(4, 2) NOT NULL,
+    rounds_list VARCHAR(255) DEFAULT 'HR Round',
     FOREIGN KEY (companyId) REFERENCES company (id)
 );
 
