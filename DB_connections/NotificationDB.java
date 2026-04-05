@@ -35,6 +35,18 @@ public class NotificationDB {
         }
     }
 
+    // Get all notifications (for admin)
+    public static ResultSet getAllNotifications() {
+        try {
+            Connection c = connecton.getConnection();
+            return c.createStatement().executeQuery(
+                    "SELECT * FROM notifications ORDER BY sent_date DESC");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
     // Get unread count
     public static int getUnreadCount(String recipientType, String recipientId) {
         try {

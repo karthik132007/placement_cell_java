@@ -6,6 +6,7 @@ import javax.swing.table.*;
 import java.awt.*;
 import java.sql.*;
 import DB_connections.*;
+import com.toedter.calendar.JDateChooser;
 
 public class AdminDashboard extends JFrame {
 
@@ -447,8 +448,8 @@ public class AdminDashboard extends JFrame {
                 ex.printStackTrace();
             }
 
-            JSpinner fS = UITheme.createStyledDateSpinner(new java.util.Date());
-            JSpinner fE = UITheme.createStyledDateSpinner(new java.util.Date());
+            JDateChooser fS = UITheme.createStyledDateChooser(new java.util.Date());
+            JDateChooser fE = UITheme.createStyledDateChooser(new java.util.Date());
             JTextField fSeats = UITheme.createStyledTextField("e.g. 50");
             JTextField fLPA = UITheme.createStyledTextField("e.g. 12.5");
             JTextField fGPA = UITheme.createStyledTextField("e.g. 7.0");
@@ -466,8 +467,8 @@ public class AdminDashboard extends JFrame {
             if (UITheme.showStyledDialog(this, "Create Drive", fields)) {
                 try {
                     int compId = Integer.parseInt(((String) cb.getSelectedItem()).split(" - ")[0]);
-                    String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fS.getValue());
-                    String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fE.getValue());
+                    String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(fS.getDate());
+                    String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(fE.getDate());
                     
                     java.util.List<String> rList = new java.util.ArrayList<>();
                     if (cbApt.isSelected()) rList.add("Aptitude");
@@ -505,8 +506,8 @@ public class AdminDashboard extends JFrame {
                         }
                     } catch (SQLException ex) { ex.printStackTrace(); }
 
-                    JSpinner fS = UITheme.createStyledDateSpinner(new java.text.SimpleDateFormat("yyyy-MM-dd").parse(rs.getString("start_date")));
-                    JSpinner fE = UITheme.createStyledDateSpinner(new java.text.SimpleDateFormat("yyyy-MM-dd").parse(rs.getString("end_date")));
+                    JDateChooser fS = UITheme.createStyledDateChooser(new java.text.SimpleDateFormat("yyyy-MM-dd").parse(rs.getString("start_date")));
+                    JDateChooser fE = UITheme.createStyledDateChooser(new java.text.SimpleDateFormat("yyyy-MM-dd").parse(rs.getString("end_date")));
                     JTextField fSeats = UITheme.createStyledTextField(String.valueOf(rs.getInt("availableSeats")));
                     JTextField fLPA = UITheme.createStyledTextField(String.valueOf(rs.getDouble("lpa")));
                     JTextField fGPA = UITheme.createStyledTextField(String.valueOf(rs.getDouble("mingpa")));
@@ -525,8 +526,8 @@ public class AdminDashboard extends JFrame {
                             "Seats:", fSeats, "LPA:", fLPA, "Min GPA:", fGPA, "Rounds:", cbPanel};
                     if (UITheme.showStyledDialog(this, "Edit Drive", fields)) {
                         int compId = Integer.parseInt(((String) cb.getSelectedItem()).split(" - ")[0]);
-                        String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fS.getValue());
-                        String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format((Date) fE.getValue());
+                        String startDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(fS.getDate());
+                        String endDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(fE.getDate());
                         
                         java.util.List<String> rList = new java.util.ArrayList<>();
                         if (cbApt.isSelected()) rList.add("Aptitude");
@@ -630,12 +631,53 @@ public class AdminDashboard extends JFrame {
             int row = table.getSelectedRow();
             if (row < 0) { msg("Select an application first."); return; }
             int appId = (int) model.getValueAt(row, 0);
+            String currentStatus = (String) model.getValueAt(row, 6);
             JComboBox<String> combo = UITheme.createStyledComboBox(
                     new String[]{"Applied", "Shortlisted", "Accepted", "Rejected"});
-            combo.setSelectedItem(model.getValueAt(row, 6));
+            combo.setSelectedItem(currentStatus);
             Object[] fields = {"New Status:", combo};
             if (UITheme.showStyledDialog(this, "Update Application Status", fields)) {
-                ApplicationDB.updateStatus(appId, (String) combo.getSelectedItem());
+                String newStatus = (String) combo.getSelectedItem();
+                ApplicationDB.updateStatus(appId, newStatus);
+                
+                // Auto-schedule first interview if status changed to Shortlisted
+                if ("Shortlisted".equals(newStatus) && !"Shortlisted".equals(currentStatus)) {
+                    try {
+                        // Get drive rounds for this application
+                        Connection c = DB_connections.connecton.getConnection();
+                        PreparedStatement ps = c.prepareStatement(
+                                "SELECT d.rounds_list FROM applications a JOIN drive d ON a.driveId = d.D_id WHERE a.A_id = ?");
+                        ps.setInt(1, appId);
+                        ResultSet rs = ps.executeQuery();
+                        if (rs != null && rs.next()) {
+                            String roundsList = rs.getString("rounds_list");
+                            if (roundsList != null && !roundsList.isEmpty()) {
+                                String[] rounds = roundsList.split(",");
+                                
+                                // Schedule all rounds: first as Scheduled, others as Pending Schedule
+                                String defaultDate = java.time.LocalDateTime.now().plusDays(1)
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd 10:00:00"));
+                                
+                                for (int i = 0; i < rounds.length; i++) {
+                                    String round = rounds[i].trim();
+                                    String status = (i == 0) ? "Scheduled" : "Pending Schedule";
+                                    InterviewDB.scheduleInterviewWithStatus(appId, defaultDate, round, "Auto-scheduled round", status);
+                                }
+                                
+                                msg("Application updated to Shortlisted and all interview rounds scheduled!");
+                            } else {
+                                msg("Application updated to Shortlisted, but no rounds defined for this drive.");
+                            }
+                        }
+                        c.close();
+                    } catch (SQLException ex) {
+                        ex.printStackTrace();
+                        msg("Application updated, but failed to auto-schedule interviews.");
+                    }
+                } else {
+                    msg("Application status updated successfully!");
+                }
+                
                 showApplications();
             }
         });
@@ -763,56 +805,22 @@ public class AdminDashboard extends JFrame {
         );
 
         JPanel header = UITheme.createHeaderPanel("Placements");
-        JButton addBtn = UITheme.createPrimaryButton("Add Placement");
-        JButton editBtn = UITheme.createSecondaryButton("Edit");
-        JButton deleteBtn = UITheme.createDangerButton("Delete");
-
-        addBtn.addActionListener(e -> {
-            // Get companies and students for dropdown
-            java.util.List<String[]> companies = new java.util.ArrayList<>();
-            java.util.List<String[]> students = new java.util.ArrayList<>();
-            try {
-                ResultSet rs = CompanyDB.getCompanyIdNames();
-                while (rs != null && rs.next()) companies.add(new String[]{String.valueOf(rs.getInt(1)), rs.getString(2)});
-                rs = StudentDB.getAllStudents();
-                while (rs != null && rs.next()) students.add(new String[]{rs.getString("rollnum"), rs.getString("name")});
-            } catch (SQLException ex) { ex.printStackTrace(); }
-
-            JComboBox<String> studentBox = new JComboBox<>();
-            JComboBox<String> companyBox = new JComboBox<>();
-            JTextField fSalary = UITheme.createStyledTextField("e.g. 500000");
-            JTextField fDate = UITheme.createStyledTextField("YYYY-MM-DD");
-
-            for (String[] s : students) studentBox.addItem(s[1] + " (" + s[0] + ")");
-            for (String[] c : companies) companyBox.addItem(c[1] + " (ID: " + c[0] + ")");
-
-            Object[] fields = {"Student:", studentBox, "Company:", companyBox, "Salary:", fSalary, "Placement Date:", fDate};
-            if (UITheme.showStyledDialog(this, "Add Placement", fields)) {
-                String selectedStudent = students.get(studentBox.getSelectedIndex())[0];
-                String selectedCompany = companies.get(companyBox.getSelectedIndex())[0];
-                PlacementDB.addPlacement(selectedStudent, Integer.parseInt(selectedCompany), 0, Double.parseDouble(fSalary.getText()), fDate.getText());
-                showPlacements();
-            }
-        });
-
-        editBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) { msg("Select a placement first."); return; }
-            // Similar to add, but pre-fill
-            msg("Edit functionality to be implemented.");
-        });
-
-        deleteBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) { msg("Select a placement first."); return; }
-            PlacementDB.deletePlacement((int) model.getValueAt(row, 0));
-            showPlacements();
-        });
 
         contentPanel.removeAll();
         contentPanel.add(header, BorderLayout.NORTH);
-        contentPanel.add(stats, BorderLayout.CENTER);
-        contentPanel.add(UITheme.createActionBar(addBtn, editBtn, deleteBtn), BorderLayout.SOUTH);
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.setOpaque(false);
+        centerPanel.setBorder(BorderFactory.createEmptyBorder(0, 28, 0, 28));
+        centerPanel.add(stats, BorderLayout.NORTH);
+
+        JPanel tableWrapper = new JPanel(new BorderLayout());
+        tableWrapper.setOpaque(false);
+        tableWrapper.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        tableWrapper.add(UITheme.createStyledScrollPane(table), BorderLayout.CENTER);
+        centerPanel.add(tableWrapper, BorderLayout.CENTER);
+
+        contentPanel.add(centerPanel, BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -824,7 +832,7 @@ public class AdminDashboard extends JFrame {
         JTable table = UITheme.createStyledTable(model);
 
         try {
-            ResultSet rs = NotificationDB.getNotifications("admin", null);
+            ResultSet rs = NotificationDB.getAllNotifications();
             while (rs != null && rs.next()) {
                 Object[] row = {rs.getInt("id"), rs.getString("recipient_type") + ": " + rs.getString("recipient_id"),
                         rs.getString("message"), rs.getString("sent_date"), rs.getBoolean("is_read") ? "Yes" : "No"};
@@ -960,16 +968,16 @@ public class AdminDashboard extends JFrame {
 
         java.util.List<Object[]> allDataActive = new java.util.ArrayList<>();
         java.util.List<Object[]> allDataAccepted = new java.util.ArrayList<>();
-        loadInterviewData(modelActive, "!Accepted", "All Companies", allDataActive);
-        loadInterviewData(modelAccepted, "Accepted", "All Companies", allDataAccepted);
+        loadInterviewData(modelActive, "Active", "All Companies", allDataActive);
+        loadInterviewData(modelAccepted, "Completed", "All Companies", allDataAccepted);
 
         // Stats
         long scheduled = allDataActive.stream().filter(r -> "Scheduled".equals(r[5])).count();
-        long accepted = allDataAccepted.size();
+        long historyCount = allDataAccepted.size();
         JPanel stats = createStatsRow(
             UITheme.createStatCard("📅", "Active", String.valueOf(allDataActive.size()), UITheme.STAT_BLUE),
             UITheme.createStatCard("⏳", "Scheduled", String.valueOf(scheduled), UITheme.STAT_ORANGE),
-            UITheme.createStatCard("✅", "Accepted", String.valueOf(accepted), UITheme.STAT_GREEN)
+            UITheme.createStatCard("✅", "History", String.valueOf(historyCount), UITheme.STAT_GREEN)
         );
 
         JTextField[] searchRefActive = new JTextField[1];
@@ -977,13 +985,13 @@ public class AdminDashboard extends JFrame {
         attachSearch(searchRefActive[0], tableActive, modelActive, allDataActive);
 
         JTextField[] searchRefAccepted = new JTextField[1];
-        JPanel searchPanelAccepted = UITheme.createSearchPanel("Search accepted...", searchRefAccepted);
+        JPanel searchPanelAccepted = UITheme.createSearchPanel("Search history...", searchRefAccepted);
         attachSearch(searchRefAccepted[0], tableAccepted, modelAccepted, allDataAccepted);
 
         JPanel header = UITheme.createHeaderPanel("Interviews");
 
         JComboBox<String> filterBox = UITheme.createStyledComboBox(
-                new String[]{"All Active", "Scheduled", "Completed", "Cancelled"});
+                new String[]{"All Active", "Scheduled"});
         filterBox.setSelectedIndex(0);
         
         java.util.List<String> intCompanyNamesList = new java.util.ArrayList<>();
@@ -1006,11 +1014,11 @@ public class AdminDashboard extends JFrame {
             String cF = (String) companyFilterBox.getSelectedItem();
             modelActive.setRowCount(0);
             allDataActive.clear();
-            loadInterviewData(modelActive, "All Active".equals(f) ? "!Accepted" : f, cF, allDataActive);
+            loadInterviewData(modelActive, "All Active".equals(f) ? "Active" : f, cF, allDataActive);
 
             modelAccepted.setRowCount(0);
             allDataAccepted.clear();
-            loadInterviewData(modelAccepted, "Accepted", cF, allDataAccepted);
+            loadInterviewData(modelAccepted, "Completed", cF, allDataAccepted);
         });
 
         rescheduleBtn.addActionListener(e -> {
@@ -1066,8 +1074,28 @@ public class AdminDashboard extends JFrame {
             int row = targetTable.getSelectedRow();
             DefaultTableModel tModel = targetTable == tableActive ? modelActive : modelAccepted;
             int interviewId = (int) tModel.getValueAt(row, 0);
+            String currentType = (String) tModel.getValueAt(row, 4);
 
-            JComboBox<String> statusBox = new JComboBox<>(new String[]{"Scheduled", "Qualified", "Rejected", "Accepted"});
+            // Determine if this is the final round
+            boolean isFinalRound = false;
+            try {
+                Connection c = DB_connections.connecton.getConnection();
+                PreparedStatement ps = c.prepareStatement(
+                        "SELECT d.rounds_list FROM interviews i JOIN applications a ON i.application_id = a.A_id JOIN drive d ON a.driveId = d.D_id WHERE i.id = ?");
+                ps.setInt(1, interviewId);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    String roundsList = rs.getString("rounds_list");
+                    if (roundsList != null) {
+                        String[] rounds = roundsList.split(",");
+                        isFinalRound = rounds[rounds.length - 1].trim().equalsIgnoreCase(currentType.trim());
+                    }
+                }
+                c.close();
+            } catch (SQLException ex) { ex.printStackTrace(); }
+
+            String[] statusOptions = isFinalRound ? new String[]{"Accepted", "Rejected"} : new String[]{"Qualified", "Rejected"};
+            JComboBox<String> statusBox = new JComboBox<>(statusOptions);
             statusBox.setSelectedItem(tModel.getValueAt(row, 5));
             JTextField fNotes = UITheme.createStyledTextField("Update notes");
 
@@ -1078,7 +1106,7 @@ public class AdminDashboard extends JFrame {
                 if ("FINAL".equals(res)) {
                     msg("Final round qualified! Placement record created & student notified.");
                 } else if ("NEXT_ROUND".equals(res)) {
-                    msg("Student qualified! Next round is queued as 'Pending Schedule'.");
+                    msg("Student qualified! Next round scheduled.");
                 } else if ("SUCCESS".equals(res)) {
                     msg("Interview updated successfully.");
                 } else {
@@ -1136,7 +1164,7 @@ public class AdminDashboard extends JFrame {
         JTabbedPane tabbedPane = new JTabbedPane();
         tabbedPane.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 14));
         tabbedPane.addTab("Current Pipeline", tabLeft);
-        tabbedPane.addTab("Final Selection (Accepted)", tabRight);
+        tabbedPane.addTab("History (Qualified/Accepted/Rejected)", tabRight);
 
         JPanel contentWrapper = new JPanel(new BorderLayout());
         contentWrapper.setOpaque(false);
@@ -1162,6 +1190,10 @@ public class AdminDashboard extends JFrame {
                 boolean statusMatch = false;
                 if (statusFilter == null) {
                     statusMatch = true;
+                } else if ("Active".equals(statusFilter)) {
+                    statusMatch = status == null || (!status.equals("Accepted") && !status.equals("Rejected") && !status.equals("Qualified") && !status.equals("Pending Schedule"));
+                } else if ("Completed".equals(statusFilter)) {
+                    statusMatch = status != null && (status.equals("Accepted") || status.equals("Rejected") || status.equals("Qualified"));
                 } else if (statusFilter.startsWith("!")) {
                     statusMatch = status == null || !status.equals(statusFilter.substring(1));
                 } else {

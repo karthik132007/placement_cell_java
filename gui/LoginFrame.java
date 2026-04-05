@@ -19,7 +19,7 @@ public class LoginFrame extends JFrame {
         setSize(520, 680);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
         getContentPane().setBackground(UITheme.BG_PRIMARY);
 
         // ──── Main wrapper with animated gradient background ────

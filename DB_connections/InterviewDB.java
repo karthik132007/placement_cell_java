@@ -6,6 +6,11 @@ public class InterviewDB {
 
     // Schedule interview
     public static boolean scheduleInterview(int applicationId, String interviewDate, String interviewType, String notes) {
+        return scheduleInterviewWithStatus(applicationId, interviewDate, interviewType, notes, "Scheduled");
+    }
+
+    // Schedule interview with specific status
+    public static boolean scheduleInterviewWithStatus(int applicationId, String interviewDate, String interviewType, String notes, String status) {
         try (Connection c = connecton.getConnection()) {
             // First get student details for notifications
             PreparedStatement ps1 = c.prepareStatement(
@@ -28,11 +33,12 @@ public class InterviewDB {
 
             // Schedule the interview
             PreparedStatement ps2 = c.prepareStatement(
-                    "INSERT INTO interviews(application_id, interview_date, interview_type, notes) VALUES(?,?,?,?)");
+                    "INSERT INTO interviews(application_id, interview_date, interview_type, status, notes) VALUES(?,?,?,?,?)");
             ps2.setInt(1, applicationId);
             ps2.setString(2, interviewDate);
             ps2.setString(3, interviewType);
-            ps2.setString(4, notes);
+            ps2.setString(4, status);
+            ps2.setString(5, notes);
             boolean success = ps2.executeUpdate() > 0;
 
             if (success && studentRoll != null) {
@@ -97,7 +103,7 @@ public class InterviewDB {
         try (Connection c = connecton.getConnection()) {
             // First get interview details for placement creation or next round
             PreparedStatement ps1 = c.prepareStatement(
-                    "SELECT a.s_id, a.driveId, s.name, s.email, co.name AS cname, d.lpa, d.rounds_list, i.interview_type, i.interview_date " +
+                    "SELECT a.s_id, a.driveId, s.name, s.email, co.name AS cname, d.lpa, d.rounds_list, i.interview_type, i.interview_date, i.application_id " +
                     "FROM interviews i " +
                     "JOIN applications a ON i.application_id = a.A_id " +
                     "JOIN student s ON a.s_id = s.rollnum " +
@@ -150,6 +156,27 @@ public class InterviewDB {
                 }
             } else if ("Accepted".equals(status)) {
                 isFinalRound = true;
+            } else if ("Rejected".equals(status)) {
+                // When rejected, update all remaining pending rounds to Rejected
+                if (roundsListStr != null && currentType != null) {
+                    String[] rounds = roundsListStr.split(",");
+                    int currentIndex = -1;
+                    for (int i = 0; i < rounds.length; i++) {
+                        if (rounds[i].trim().equalsIgnoreCase(currentType.trim())) {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+                    if (currentIndex >= 0) {
+                        for (int i = currentIndex + 1; i < rounds.length; i++) {
+                            PreparedStatement psReject = c.prepareStatement(
+                                    "UPDATE interviews SET status='Rejected', notes='Rejected in previous round' WHERE application_id=? AND interview_type=? AND status='Pending Schedule'");
+                            psReject.setInt(1, rs.getInt("application_id"));
+                            psReject.setString(2, rounds[i].trim());
+                            psReject.executeUpdate();
+                        }
+                    }
+                }
             }
 
             PreparedStatement ps2 = c.prepareStatement("UPDATE interviews SET status=?, notes=? WHERE id=?");
@@ -169,8 +196,8 @@ public class InterviewDB {
                     ps3.executeUpdate();
 
                     PreparedStatement ps4 = c.prepareStatement(
-                            "UPDATE applications SET status='Accepted' WHERE A_id = (SELECT application_id FROM interviews WHERE id = ?)");
-                    ps4.setInt(1, interviewId);
+                            "UPDATE applications SET status='Accepted' WHERE A_id = ?");
+                    ps4.setInt(1, rs.getInt("application_id"));
                     ps4.executeUpdate();
 
                     NotificationDB.sendNotification("student", studentRoll,
@@ -182,18 +209,19 @@ public class InterviewDB {
                             "Best regards,\nPlacement Cell");
                     return "FINAL";
                 } else if ("Qualified".equals(status) && nextRoundName != null) {
+                    // Update the next pending round to Scheduled
                     PreparedStatement psNext = c.prepareStatement(
-                            "INSERT INTO interviews(application_id, interview_date, interview_type, status, notes) " +
-                            "SELECT application_id, interview_date, ?, 'Pending Schedule', '' FROM interviews WHERE id=?");
-                    psNext.setString(1, nextRoundName);
-                    psNext.setInt(2, interviewId);
+                            "UPDATE interviews SET status='Scheduled', interview_date=?, notes='Scheduled after qualifying previous round' WHERE application_id=? AND interview_type=? AND status='Pending Schedule'");
+                    psNext.setString(1, rs.getString("interview_date")); // Use same date as current, admin can reschedule
+                    psNext.setInt(2, rs.getInt("application_id"));
+                    psNext.setString(3, nextRoundName);
                     psNext.executeUpdate();
 
                     NotificationDB.sendNotification("student", studentRoll,
-                            "Congratulations on qualifying! Your next round is: " + nextRoundName + ". It will be scheduled shortly.");
+                            "Congratulations on qualifying! Your next round (" + nextRoundName + ") has been scheduled.");
                     utils.EmailUtil.sendEmail(studentEmail, "Qualified for Next Round",
                             "Dear " + studentName + ",\n\nCongratulations! You have qualified the current round.\n\n" +
-                            "Next Round: " + nextRoundName + "\nIt will be scheduled shortly.\n\nBest regards,\nPlacement Cell");
+                            "Next Round: " + nextRoundName + "\nIt has been scheduled.\n\nBest regards,\nPlacement Cell");
                     return "NEXT_ROUND";
                 }
             }

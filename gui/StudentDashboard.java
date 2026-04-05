@@ -309,6 +309,7 @@ public class StudentDashboard extends JFrame {
                 fAge.setText(String.valueOf(rs.getInt("age")));
                 fMajor.setText(rs.getString("major"));
                 fGPA.setText(String.valueOf(rs.getDouble("gpa")));
+                fEmail.setText(rs.getString("email"));
                 fPass.setText(rs.getString("password"));
                 fResume.setText(rs.getString("resume_path") != null ? rs.getString("resume_path") : "");
                 resumeLabel.setText(rs.getString("resume_path") != null ? 
